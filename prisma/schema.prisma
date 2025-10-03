@@ -1,0 +1,265 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  SCHOOL_ADMIN
+  ACADEMIC_ADMIN
+  FACULTY
+  STUDENT
+  PARENT
+}
+
+model School {
+  id        Int              @id @default(autoincrement())
+  name      String           @unique
+  address   String?
+  phone     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  users     User[]
+  faculty   FacultyProfile[]
+  students  StudentProfile[]
+  admins    AdminProfile[]
+  classes   ClassSection[]
+  subjects  Subject[]
+  reviews   AdminReview[]
+  teachingAssignments TeachingAssignment[]
+  facultyReviews      FacultyReview[]
+  studentReviews      StudentReview[]
+  termResults         TermResult[]
+}
+
+model User {
+  id                 Int        @id @default(autoincrement())
+  email              String?    @unique
+  mobile             String?    @unique
+  passwordHash       String
+  role               Role
+  isActive           Boolean    @default(true)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  // For non-super roles, optional school linkage (super admin has null)
+  schoolId           Int?
+  school             School?    @relation(fields: [schoolId], references: [id])
+
+  facultyProfile     FacultyProfile?
+  studentProfile     StudentProfile?
+  parentProfile      ParentProfile?
+  adminProfile       AdminProfile?
+
+  resetToken         String?    @unique
+  resetTokenExpires  DateTime?
+}
+
+model FacultyProfile {
+  id                 Int               @id @default(autoincrement())
+  userId             Int               @unique
+  user               User              @relation(fields: [userId], references: [id])
+
+  schoolId           Int
+  school             School            @relation(fields: [schoolId], references: [id])
+
+  name               String
+  designation        String?
+  qualifications     String?
+  yearsOfExperience  Int               @default(0)
+  photoUrl           String?
+  contact            String?
+
+  subjects           FacultySubject[]
+  assignments        TeachingAssignment[]
+  receivedReviews    FacultyReview[]
+  authoredStudentReviews StudentReview[] @relation("FacultyAuthoredStudentReview")
+  authoredAdminReviews   AdminReview[]
+}
+
+model StudentProfile {
+  id                 Int               @id @default(autoincrement())
+  userId             Int               @unique
+  user               User              @relation(fields: [userId], references: [id])
+
+  schoolId           Int
+  school             School            @relation(fields: [schoolId], references: [id])
+
+  name               String
+  rollNumber         String
+  grade              Int
+  section            String
+  parentName         String?
+  parentContact      String?
+  dob                DateTime?
+  admissionDate      DateTime?
+  photoUrl           String?
+
+  enrollments        StudentEnrollment[]
+  authoredFacultyReviews FacultyReview[] @relation("StudentAuthorFacultyReview")
+  receivedReviews    StudentReview[]
+  termResults        TermResult[]
+
+  parentProfile      ParentProfile?
+
+  @@unique([schoolId, rollNumber])
+}
+
+model ParentProfile {
+  id            Int             @id @default(autoincrement())
+  userId        Int             @unique
+  user          User            @relation(fields: [userId], references: [id])
+  studentId     Int             @unique
+  student       StudentProfile  @relation(fields: [studentId], references: [id])
+  name          String?
+  contact       String?
+
+  authoredFacultyReviews FacultyReview[] @relation("ParentAuthorFacultyReview")
+  authoredAdminReviews   AdminReview[]
+}
+
+model AdminProfile {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @unique
+  user          User     @relation(fields: [userId], references: [id])
+  schoolId      Int?
+  school        School?  @relation(fields: [schoolId], references: [id])
+  name          String
+  designation   String
+  responsibilities String?
+}
+
+model ClassSection {
+  id            Int                 @id @default(autoincrement())
+  schoolId      Int
+  school        School              @relation(fields: [schoolId], references: [id])
+  grade         Int
+  section       String
+  students      StudentEnrollment[]
+  assignments   TeachingAssignment[]
+
+  @@unique([schoolId, grade, section])
+}
+
+model Subject {
+  id            Int                 @id @default(autoincrement())
+  schoolId      Int
+  school        School              @relation(fields: [schoolId], references: [id])
+  name          String
+  code          String?
+  assignments   TeachingAssignment[]
+  termResults   TermResult[]
+  faculty       FacultySubject[]
+
+  @@unique([schoolId, name])
+}
+
+model FacultySubject {
+  id          Int             @id @default(autoincrement())
+  facultyId   Int
+  faculty     FacultyProfile  @relation(fields: [facultyId], references: [id])
+  subjectId   Int
+  subject     Subject         @relation(fields: [subjectId], references: [id])
+
+  @@unique([facultyId, subjectId])
+}
+
+model TeachingAssignment {
+  id              Int            @id @default(autoincrement())
+  schoolId        Int
+  school          School         @relation(fields: [schoolId], references: [id])
+  facultyId       Int
+  faculty         FacultyProfile @relation(fields: [facultyId], references: [id])
+  classSectionId  Int
+  classSection    ClassSection   @relation(fields: [classSectionId], references: [id])
+  subjectId       Int
+  subject         Subject        @relation(fields: [subjectId], references: [id])
+
+  @@unique([facultyId, classSectionId, subjectId])
+}
+
+model StudentEnrollment {
+  id              Int            @id @default(autoincrement())
+  studentId       Int
+  student         StudentProfile @relation(fields: [studentId], references: [id])
+  classSectionId  Int
+  classSection    ClassSection   @relation(fields: [classSectionId], references: [id])
+  enrolledAt      DateTime       @default(now())
+  isActive        Boolean        @default(true)
+
+  @@unique([studentId, classSectionId])
+}
+
+model FacultyReview {
+  id                  Int             @id @default(autoincrement())
+  schoolId            Int
+  school              School          @relation(fields: [schoolId], references: [id])
+  facultyId           Int
+  faculty             FacultyProfile  @relation(fields: [facultyId], references: [id])
+  rating              Int
+  comment             String?
+  createdAt           DateTime        @default(now())
+
+  createdByStudentId  Int?
+  createdByStudent    StudentProfile? @relation("StudentAuthorFacultyReview", fields: [createdByStudentId], references: [id])
+
+  createdByParentId   Int?
+  createdByParent     ParentProfile?  @relation("ParentAuthorFacultyReview", fields: [createdByParentId], references: [id])
+}
+
+model StudentReview {
+  id            Int             @id @default(autoincrement())
+  schoolId      Int
+  school        School          @relation(fields: [schoolId], references: [id])
+  studentId     Int
+  student       StudentProfile  @relation(fields: [studentId], references: [id])
+  facultyId     Int
+  faculty       FacultyProfile  @relation("FacultyAuthoredStudentReview", fields: [facultyId], references: [id])
+  rating        Int?
+  comment       String?
+  isPrivate     Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+}
+
+model AdminReview {
+  id                Int             @id @default(autoincrement())
+  schoolId          Int
+  school            School          @relation(fields: [schoolId], references: [id])
+  rating            Int
+  category          String?
+  comment           String?
+  createdAt         DateTime        @default(now())
+
+  createdByFacultyId Int?
+  createdByFaculty   FacultyProfile? @relation(fields: [createdByFacultyId], references: [id])
+
+  createdByParentId  Int?
+  createdByParent    ParentProfile?  @relation(fields: [createdByParentId], references: [id])
+}
+
+model TermResult {
+  id          Int            @id @default(autoincrement())
+  schoolId    Int
+  school      School         @relation(fields: [schoolId], references: [id])
+  studentId   Int
+  student     StudentProfile @relation(fields: [studentId], references: [id])
+  subjectId   Int
+  subject     Subject        @relation(fields: [subjectId], references: [id])
+  term        String
+  marks       Int?
+  grade       String?
+  publishedAt DateTime?
+
+  @@unique([studentId, subjectId, term])
+}
